@@ -155,7 +155,7 @@ def fix_object(ob):
 		fix_object(child)
 
 
-def export_unity_fbx(context, filepath, active_collection, selected_objects, deform_bones, leaf_bones, primary_bone_axis, secondary_bone_axis, tangent_space, triangulate_faces, embed_textures, apply_modifiers):
+def export_unity_fbx(context, filepath, active_collection, selected_objects, deform_bones, leaf_bones, primary_bone_axis, secondary_bone_axis, tangent_space, triangulate_faces, embed_textures, apply_modifiers, visible_objects):
 	global shared_data
 	global hidden_collections
 	global hidden_objects
@@ -230,7 +230,9 @@ def export_unity_fbx(context, filepath, active_collection, selected_objects, def
 			ob.select_set(True)
 
 		# Export FBX file
-		params = dict(filepath=filepath, apply_scale_options='FBX_SCALE_UNITS', object_types={'EMPTY', 'MESH', 'ARMATURE'}, use_custom_props=True, use_active_collection=active_collection, use_selection=selected_objects, use_armature_deform_only=deform_bones, add_leaf_bones=leaf_bones, primary_bone_axis=primary_bone_axis, secondary_bone_axis=secondary_bone_axis, use_tspace=tangent_space, use_triangles=triangulate_faces, use_mesh_modifiers=apply_modifiers)
+		# Visibility has already been restored above, so 'use_visible' filters out the objects
+		# hidden or disabled in the original scene (eye and monitor icons, hidden collections).
+		params = dict(filepath=filepath, apply_scale_options='FBX_SCALE_UNITS', object_types={'EMPTY', 'MESH', 'ARMATURE'}, use_custom_props=True, use_active_collection=active_collection, use_selection=selected_objects, use_visible=visible_objects, use_armature_deform_only=deform_bones, add_leaf_bones=leaf_bones, primary_bone_axis=primary_bone_axis, secondary_bone_axis=secondary_bone_axis, use_tspace=tangent_space, use_triangles=triangulate_faces, use_mesh_modifiers=apply_modifiers)
 		if embed_textures:
 			params["path_mode"] = 'COPY'
 			params["embed_textures"] = True
@@ -293,6 +295,12 @@ class ExportUnityFbx(Operator, ExportHelper):
 	selected_objects: BoolProperty(
 		name="Selected Objects Only",
 		description="Export selected objects only. May be combined with Active Collection Only",
+		default=False,
+	)
+
+	visible_objects: BoolProperty(
+		name="Visible Objects Only",
+		description="Export visible objects only. Objects and collections hidden or disabled in the outliner (eye and monitor icons) are not exported. May be combined with Active Collection Only and Selected Objects Only",
 		default=False,
 	)
 
@@ -365,6 +373,7 @@ class ExportUnityFbx(Operator, ExportHelper):
 		layout.row().label(text = "Selection")
 		layout.row().prop(self, "active_collection")
 		layout.row().prop(self, "selected_objects")
+		layout.row().prop(self, "visible_objects")
 
 		layout.separator()
 		layout.row().label(text = "Meshes")
@@ -394,7 +403,7 @@ class ExportUnityFbx(Operator, ExportHelper):
 		split.column().prop(self, "secondary_bone_axis", text="")
 
 	def execute(self, context):
-		return export_unity_fbx(context, self.filepath, self.active_collection, self.selected_objects, self.deform_bones, self.leaf_bones, self.primary_bone_axis, self.secondary_bone_axis, self.tangent_space, self.triangulate_faces, self.embed_textures, self.apply_modifiers)
+		return export_unity_fbx(context, self.filepath, self.active_collection, self.selected_objects, self.deform_bones, self.leaf_bones, self.primary_bone_axis, self.secondary_bone_axis, self.tangent_space, self.triangulate_faces, self.embed_textures, self.apply_modifiers, self.visible_objects)
 
 
 # Only needed if you want to add into a dynamic menu
