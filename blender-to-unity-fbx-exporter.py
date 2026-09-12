@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "Unity FBX format",
 	"author": "Angel 'Edy' Garcia (@VehiclePhysics)",
-	"version": (1, 4, 3),
+	"version": (1, 4, 4),
 	"blender": (3, 2, 0),
 	"location": "File > Export > Unity FBX",
 	"description": "FBX exporter compatible with Unity's coordinate and scaling system.",
@@ -96,7 +96,7 @@ def make_single_user_data():
 				ob.data = ob.data.copy()
 
 
-def apply_object_modifiers():
+def apply_object_modifiers(apply_modifiers):
 	# Select objects in current view layer not using an armature modifier
 	bpy.ops.object.select_all(action='DESELECT')
 	for ob in bpy.data.objects:
@@ -106,6 +106,11 @@ def apply_object_modifiers():
 				if mod.type == 'ARMATURE':
 					bypass_modifiers = True
 			if not bypass_modifiers:
+				# Meshes are left untouched when the user chose not to apply modifiers.
+				# Non-mesh datablocks (CURVE, SURFACE, FONT, ...) are always converted to
+				# meshes, otherwise the built-in FBX exporter can't export them.
+				if not apply_modifiers and ob.type == 'MESH':
+					continue
 				ob.select_set(True)
 
 	# Conversion to mesh may not be available depending on the remaining objects
@@ -150,7 +155,7 @@ def fix_object(ob):
 		fix_object(child)
 
 
-def export_unity_fbx(context, filepath, active_collection, selected_objects, deform_bones, leaf_bones, primary_bone_axis, secondary_bone_axis, tangent_space, triangulate_faces, embed_textures):
+def export_unity_fbx(context, filepath, active_collection, selected_objects, deform_bones, leaf_bones, primary_bone_axis, secondary_bone_axis, tangent_space, triangulate_faces, embed_textures, apply_modifiers):
 	global shared_data
 	global hidden_collections
 	global hidden_objects
@@ -188,8 +193,11 @@ def export_unity_fbx(context, filepath, active_collection, selected_objects, def
 	# Create a single copy in multi-user datablocks. Will be restored after fixing rotations.
 	make_single_user_data()
 
-	# Apply modifiers to objects (except those affected by an armature)
-	apply_object_modifiers()
+	# Apply modifiers to objects (except those affected by an armature), and convert
+	# curves, surfaces and fonts to meshes. When the user disables "Apply Modifiers",
+	# meshes are left as-is (but non-mesh datablocks are still converted, otherwise
+	# they wouldn't be exported at all).
+	apply_object_modifiers(apply_modifiers)
 
 	try:
 		# Fix rotations
@@ -222,7 +230,7 @@ def export_unity_fbx(context, filepath, active_collection, selected_objects, def
 			ob.select_set(True)
 
 		# Export FBX file
-		params = dict(filepath=filepath, apply_scale_options='FBX_SCALE_UNITS', object_types={'EMPTY', 'MESH', 'ARMATURE'}, use_custom_props=True, use_active_collection=active_collection, use_selection=selected_objects, use_armature_deform_only=deform_bones, add_leaf_bones=leaf_bones, primary_bone_axis=primary_bone_axis, secondary_bone_axis=secondary_bone_axis, use_tspace=tangent_space, use_triangles=triangulate_faces)
+		params = dict(filepath=filepath, apply_scale_options='FBX_SCALE_UNITS', object_types={'EMPTY', 'MESH', 'ARMATURE'}, use_custom_props=True, use_active_collection=active_collection, use_selection=selected_objects, use_armature_deform_only=deform_bones, add_leaf_bones=leaf_bones, primary_bone_axis=primary_bone_axis, secondary_bone_axis=secondary_bone_axis, use_tspace=tangent_space, use_triangles=triangulate_faces, use_mesh_modifiers=apply_modifiers)
 		if embed_textures:
 			params["path_mode"] = 'COPY'
 			params["embed_textures"] = True
@@ -324,6 +332,12 @@ class ExportUnityFbx(Operator, ExportHelper):
 		default='X',
 	)
 
+	apply_modifiers: BoolProperty(
+		name="Apply Modifiers",
+		description="Apply the modifiers of the objects before exporting (objects driven by an armature modifier are excluded, as their deformation is exported with the armature). When disabled, modifiers are left unapplied and are not baked into the exported FBX",
+		default=True,
+	)
+
 	tangent_space: BoolProperty(
 		name="Export tangents",
 		description="Add binormal and tangent vectors, together with normal they form the tangent space (tris/quads only). Meshes with N-gons won't export tangents unless the option Triangulate Faces is enabled",
@@ -354,6 +368,7 @@ class ExportUnityFbx(Operator, ExportHelper):
 
 		layout.separator()
 		layout.row().label(text = "Meshes")
+		layout.row().prop(self, "apply_modifiers")
 		layout.row().prop(self, "tangent_space")
 		layout.row().prop(self, "triangulate_faces")
 
@@ -379,7 +394,7 @@ class ExportUnityFbx(Operator, ExportHelper):
 		split.column().prop(self, "secondary_bone_axis", text="")
 
 	def execute(self, context):
-		return export_unity_fbx(context, self.filepath, self.active_collection, self.selected_objects, self.deform_bones, self.leaf_bones, self.primary_bone_axis, self.secondary_bone_axis, self.tangent_space, self.triangulate_faces, self.embed_textures)
+		return export_unity_fbx(context, self.filepath, self.active_collection, self.selected_objects, self.deform_bones, self.leaf_bones, self.primary_bone_axis, self.secondary_bone_axis, self.tangent_space, self.triangulate_faces, self.embed_textures, self.apply_modifiers)
 
 
 # Only needed if you want to add into a dynamic menu
